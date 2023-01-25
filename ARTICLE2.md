@@ -53,3 +53,64 @@ ExecReStart=/opt/apache-tomcat-10.1.5/bin/shutdown.sh;/opt/apache-tomcat-10.1.5/
 [Install]
 WantedBy=multi-user.target
 ```
+## tomcatとhttpdの連携
+
+AJP
+
+### tomcatの設定
+
+`{tomcat}/conf/server.xml`を修正する
+- `port=8080`をコメントアウト
+
+- AJP/1.3のコメントアウトを外す
+  - `address="0.0.0.0"`に書き換える
+  - `secretRequired="false"`を加える
+
+```sh
+[container]$ vi /opt/apache-tomcat-10.1.5/conf/server.xml
+...
+<!--
+<Connector port="8080" protocol="HTTP/1.1"
+           connectionTimeout="20000"
+           redirectPort="8443" />
+-->
+<Connector protocol="AJP/1.3"
+           address="0.0.0.0"
+           port="8009"
+           redirectPort="8443"
+           secretRequired="false" />
+...
+```
+
+### httpdの設定
+
+`/etc/httpd/conf.modules.d/00-proxy.conf`を修正する
+- `LoadModule proxy_ajp_module modules/mod_proxy_ajp.so`を追加する
+
+```sh
+[container]$ vi /etc/httpd/conf.modules.d/00-proxy.conf
+...
+LoadModule proxy_ajp_module modules/mod_proxy_ajp.so
+...
+```
+`/etc/httpd/conf/httpd.conf`を修正する
+
+```httpd.conf
+[container]$ vi /etc/httpd/conf/httpd.conf
+...
+# ProxyPass
+#
+# proxy setting to integrate tomcat
+ProxyPass /api/ ajp://localhost:8009/
+ProxyPassReverse /api/ ajp://localhost:8009/
+...
+```
+
+## 確認
+
+httpdとtomcatを起動して`http://localhost:80/api`にアクセスしてtomcatの画面が表示されることを確かめる　
+
+```sh
+[container]$ systemctl start httpd
+[container]$ systemctl start tomcat
+```
